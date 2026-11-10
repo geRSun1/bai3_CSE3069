@@ -3,8 +3,7 @@
 File trong repo này
 - `control.ino` — firmware máy trạng thái DỪNG/CHẠY/LỖI (có ISR + timer)
 - `fsm_diagram.png` — sơ đồ trạng thái
-- `test_case_1.mp4` / `test_case_2.mp4` / `test_case_3.mp4` — video 3 ca thử trên mô hình nhà kính
-- `serial_log.txt` — log Serial của cả 3 ca
+- `test_case_1.mp4` / `test_case_2.mp4` — video 2 ca thử trên mô hình nhà kính
 ---
 
 4.1 Cấu hình phần cứng
