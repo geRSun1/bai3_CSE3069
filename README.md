@@ -64,34 +64,25 @@ Ba cơ chế dừng/điều khiển
 
 | Cơ chế | Hành vi mong muốn | Tình trạng |
 |---|---|---|
-| **Điều khiển dừng theo ý muốn** | Bơm tự bật/tắt theo điều khiển của người sử dụng.|Người dùng có thể điều khiển phần cứng bằng cách tương tác các nút bấm trên web |
+| **Điều khiển dừng theo ý muốn** | Bơm tự bật/tắt theo điều khiển của người sử dụng.|Nút bấm trên Web gửi lệnh Bật/Tắt qua giao thức MQTT/HTTP xuống ESP32 để xuất tín hiệu ra chân GPIO đóng/ngắt Relay điều khiển máy bơm.
 | **Giới hạn thời gian** | Khi bơm chạy đủ **20 giây**, tự chuyển về `STOP` và tắt đầu ra, kể cả khi không nhận được lệnh dừng từ web. |`updateState()` so sánh thời gian bằng phép trừ `millis()`. Khi hết hạn, `pumpRequested` bị xóa và hai đầu vào cầu H về LOW. |
 | **Ngưỡng cảm biến** | Tắt bơm khi giá trị cảm biến đạt ngưỡng dừng đã hiệu chuẩn. Ngưỡng phải thuộc đúng loại cảm biến và chiều đo của nó. |`autoThreshold = 30 °C` (web chấp nhận 0–60 °C) hiện chỉ dùng để đổi LED cảnh báo khi nhiệt độ đạt/vượt ngưỡng. Và người dùng hoàn toàn có thể chọn ngưỡng
 ---
 4. Kết quả
 Hệ thống được thiết kế theo máy trạng thái hữu hạn (FSM) gồm 3 trạng thái: `DỪNG (IDLE)`, `CHẠY (RUNNING)` và `LỖI (FAULT)`, trong đó mọi nhánh sự cố hoặc hết giờ đều có độ ưu tiên cao nhất để đưa tải về trạng thái an toàn (`PWM = 0`).
-![Sơ đồ máy trạng thái FSM](fsm_diagram.png)
-Ca kiểm thử (Test Case)	Đầu vào kích hoạt (Input)	Phản ứng thực tế của hệ thống (Observed)	Khớp với kỳ vọng "LỖI/hết giờ luôn về DỪNG"?
-Ca 1: Chu trình bình thường (`test_case_1.mp4`)	Nhiệt độ đo được hợp lệ ($31,5^\circ\text{C} > 30^\circ\text{C}$) hoặc nhận lệnh BẬT hợp lệ; bấm nút dừng trước khi hết giờ (tại $t = 5\text{s}$).	Hệ thống chuyển từ `DỪNG` $\rightarrow$ `CHẠY`, bật tải PWM ở mức 60%. Khi bấm nút ngắt ngoài tại giây thứ 5, ISR kích hoạt cờ dừng, hệ thống lập tức ngắt PWM về `0` và chuyển về `DỪNG`.	ĐẠT (Khớp 100%). Phản hồi ngắt ngoài tức thì ($< 2\text{ ms}$).
-Ca 2: Quá thời gian cho phép - Timeout (`test_case_2.mp4`)	Kích hoạt cho hệ thống vào trạng thái `CHẠY` và để chạy liên tục vượt quá ngưỡng thời gian an toàn tối đa ($T_{\text{max}} = 10\text{ giây}$).	Đúng tại mốc $10.000\text{ ms}$, Timer phần cứng báo hết giờ (Timeout). Hệ thống tự động cưỡng bức tắt tải (`PWM = 0`), in cảnh báo `[TIMEOUT]` ra Serial và chuyển về trạng thái `DỪNG` (hoặc khóa an toàn chờ xác nhận).	ĐẠT (Khớp 100%). Đảm bảo bơm/quạt không bao giờ chạy tràn lan nếu mất lệnh dừng.
-Ca 3: Dữ liệu cảm biến lỗi (`test_case_3.mp4`)	Khi hệ thống đang ở trạng thái `CHẠY`, rút dây `DATA` của cảm biến DHT11 để tạo dữ liệu lỗi (`NaN` / `valid = 0`).	Ngay ở chu kỳ đọc tiếp theo, hàm kiểm tra phát hiện `isnan(temp) == true`. Hệ thống lập tức ngắt tải (`PWM = 0`), bật đèn cảnh báo và chuyển sang trạng thái `LỖI`, sau đó khóa cơ cấu chấp hành ở mức an toàn (`DỪNG` tải).	ĐẠT (Khớp 100%). Không dùng giá trị rác/0 để điều khiển tiếp.
-Sự cố phát sinh trong quá trình thử nghiệm và cách đã sửa:
-Nguyên nhân ban đầu: Ở lần chạy thử đầu tiên của Ca 3, khi chuyển sang trạng thái `LỖI`, mình chỉ đổi biến trạng thái `state = FAULT;` nhưng quên gọi lệnh `ledcWrite(PWM_CHANNEL, 0);` ngay trong nhánh chuyển tiếp, khiến động cơ vẫn giữ nguyên mức xung PWM cũ và tiếp tục quay dù màn hình đã báo lỗi.
-Cách đã sửa: Bổ sung hàm `safeShutdown()` (ép `ledcWrite(PWM_CHANNEL, 0)` và `digitalWrite(RELAY_PIN, LOW)`) vào ngay điểm vào (Entry Action) của cả hai trạng thái `DỪNG` và `LỖI`, đồng thời gọi trực tiếp ngay khi phát hiện cờ lỗi/timeout. Sau khi sửa, cả 3 ca thử đều ngắt tải tức thì.
-Trích xuất log thực tế từ tệp `serial_log.txt`:
+
+Ca kiểm thử (Test Case)
+
+
+**Ca 1**: Điều khiển máy bơm (`test_case_1.mp4`)	Nhiệt độ đo được hợp lệ ($31,5^\circ\text{C} > 30^\circ\text{C}$) hoặc nhận lệnh BẬT hợp lệ; bấm nút dừng trước khi hết giờ (tại $t = 5\text{s}$).	Hệ thống chuyển từ `DỪNG` $\rightarrow$ `CHẠY`, bật tải PWM ở mức 60%. Khi bấm nút ngắt ngoài tại giây thứ 5, ISR kích hoạt cờ dừng, hệ thống lập tức ngắt PWM về `0` và chuyển về `DỪNG`.
+
+<img width="667" height="50" alt="image" src="https://github.com/user-attachments/assets/989c16a6-2243-4230-92c1-5fdc11bd076c" />
 
 
 
-[0002000 ms] STATE: IDLE | Temp: 29.4 C | Valid: 1 | PWM: 0%
-[0004000 ms] CMD: START -> STATE: RUNNING | Timer Started (Max 10s) | PWM: 60%
-[0009120 ms] [ISR] Button Pressed (Count: 1) -> Emergency Stop Triggered!
-[0009121 ms] STATE: IDLE | Safe Shutdown Executed | PWM: 0%
-------------------------------------------------------------------------
-[0012000 ms] CMD: START -> STATE: RUNNING | Timer Started (Max 10s) | PWM: 60%
-[0022000 ms] [TIMER ISR] Runtime exceeded 10000 ms! Timeout!
-[0022001 ms] STATE: IDLE (TIMEOUT STOP) | PWM: 0%
-------------------------------------------------------------------------
-[0026000 ms] CMD: START -> STATE: RUNNING | Temp: 31.2 C | Valid: 1 | PWM: 60%
-[0028000 ms] [ERROR] Sensor read failed (NaN)! Valid: 0
-[0028001 ms] STATE: FAULT -> FORCE STOP LOAD | PWM: 0% | Alarm LED: ON
+**Ca 2**: Quá thời gian cho phép - Timeout (`test_case_2.mp4`)	Kích hoạt cho hệ thống vào trạng thái `CHẠY` và để chạy liên tục vượt quá ngưỡng thời gian an toàn tối đa ($T_{\text{max}} = 20\text{ giây}$).	Đúng tại mốc $20.000\text{ ms}$, Timer phần cứng báo hết giờ (Timeout). Hệ thống tự động cưỡng bức tắt tải (`PWM = 0`), in cảnh báo `[TIMEOUT]` ra Serial và chuyển về trạng thái `DỪNG` (hoặc khóa an toàn chờ xác nhận).	
+
+<img width="619" height="36" alt="image" src="https://github.com/user-attachments/assets/edf0113f-6bdb-4f6e-b8dd-4c805ef4ef74" />
+
+
 ```
