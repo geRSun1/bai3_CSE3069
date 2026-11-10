@@ -5,7 +5,7 @@ File trong repo này
 - `test_case_1.mp4` / `test_case_2.mp4` — video 2 ca thử trên mô hình nhà kính
 ---
 
-4.1 Cấu hình phần cứng
+**Cấu hình phần cứng**
 Vi điều khiển trung tâm: Doit ESP32 Devkit V1.
 
 Sơ đồ không nối bơm, quạt, heater hay dải LED trực tiếp vào chân GPIO. GPIO chỉ phát tín hiệu điều khiển; dòng tải đi qua driver công suất. Các mạch động cơ dùng cầu H A4950, còn heater và một số dải LED dùng driver N531 + MOSFET 30N06. Sơ đồ không thể hiện relay.
@@ -56,7 +56,7 @@ Trạng thái khi vừa cấp nguồn
 - Servo: D9 chưa phát xung PWM trước khi chương trình khởi tạo.
 ---
 
-4.2 Ngắt ngoài
+**Ngắt ngoài**
 
 Ba cơ chế dừng/điều khiển
 
